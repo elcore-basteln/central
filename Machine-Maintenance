@@ -1,0 +1,25 @@
+# SSH access to the machine
+ssh rancher@elcore.example.com
+
+# RancherOS config
+mkdir config-2
+sudo mount /dev/disk/by-label/config-2 config-2
+sudoedit config-2/openstack/latest/user_data
+sudo ros c merge <config-2/openstack/latest/user_data
+# 'merge' really means merge here, once set values will not get removed!
+
+# Reset container influxdb
+# Don't forget to persist important data as a docker volume into /Storage/Volumes!
+# This is done via config-2/openstack/latest/user_data.
+# If you don't do this carefully, the next commands will delete your beloved data!
+sudo ros s stop influxdb
+sudo ros s rm influxdb
+sudo ros s up influxdb
+
+# Rename influxdb measurement
+docker exec -it influxdb influx -ssl -unsafeSsl
+> select * into "Heatpump Temperature Max" from "Heatpumpe Temperature Max" group by *
+> drop measurement "Heatpumpe Temperature Max"
+
+# ros c = ros config
+# ros s = ros service

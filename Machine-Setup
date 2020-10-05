@@ -1,0 +1,30 @@
+# Boot your favorite linux iso
+
+sfdisk /dev/sda <<EOF
+label: dos
+device: /dev/sda
+unit: sectors
+
+/dev/sda1 : start=        2048, size=      204800, type=c
+/dev/sda2 : start=      206848, size=     8388608, type=82
+/dev/sda3 : start=     8595456, size=   167772160, type=83
+/dev/sda4 : start=   176367616, size=    89970688, type=83
+EOF
+
+mkfs.vfat -n config-2 /dev/sda1
+mount /dev/disk/by-label/config-2 /mnt
+mkdir -p /mnt/openstack/latest
+cd /mnt/openstack/latest
+wget https://raw.githubusercontent.com/elcore-basteln/central/main/config-2/openstack/latest/user_data
+$EDITOR user_data # adapt dns-server, mac-address, password, email, domain
+
+mkswap -L RANCHER_SWAP /dev/sda2
+mkfs.ext4 -L Storage /dev/sda3
+mkfs.ext4 -L RANCHER_STATE /dev/sda4
+
+# Boot https://releases.rancher.com/os/latest/rancheros.iso
+# In bootloader quickly press the tab key
+# Add kernel parameter rancher.state.dev=LABEL=RANCHER_STATE
+
+docker run -it --volume /Storage/Volumes/grafana:/var/lib/grafana --user root --entrypoint bash grafana/grafana
+chown grafana:grafana /var/lib/grafana

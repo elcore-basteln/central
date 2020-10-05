@@ -1,0 +1,113 @@
+#cloud-config
+hostname: elcore
+ssh_authorized_keys:
+- ssh-rsa AAAA... rsa-key-20180108
+mounts:
+- [LABEL=Storage, /Storage, 'ext4', '']
+runcmd:
+- swapon LABEL=RANCHER_SWAP # required (last check rancheros 1.5.6)
+rancher:
+# state:
+#  formatzero: true
+#  fstype: auto
+#  dev: LABEL=RANCHER_STATE
+#  autoformat:
+#  - /dev/sda4
+ network:
+  dns:
+   nameservers:
+   - 2a01:af8:0:a111::add:9898
+   - 2a01:af8:0:a111::add:9999
+   - 213.133.98.98 # required (even with dhcp, last check rancheros 1.5.6)
+   - 213.133.99.99
+   - 213.133.100.100
+  interfaces:
+   "mac=00:01:02:03:04:05":
+    address: 2a01:4f8::123/64
+    gateway_ipv6: 2a01:4f8::1
+   "mac=00:01:02:03:04:05":
+    dhcp: true
+ services:
+  nginx-proxy:
+   image: jwilder/nginx-proxy:alpine
+   ports:
+   - 80:80 # only for letsencrypt
+   - 443:443
+   volumes:
+   - /Storage/Volumes/nginx-proxy/certs:/etc/nginx/certs
+   - /etc/nginx/vhost.d
+   - /usr/share/nginx/html
+   - /var/run/docker.sock:/tmp/docker.sock:ro
+   environment:
+   - ENABLE_IPV6=true
+  nginx-proxy-letsencrypt:
+   image: jrcs/letsencrypt-nginx-proxy-companion
+   volumes_from:
+   - nginx-proxy
+   volumes:
+   - /Storage/Volumes/nginx-proxy/certs:/etc/nginx/certs
+   - /var/run/docker.sock:/var/run/docker.sock:ro
+   environment:
+   - DEFAULT_EMAIL=mail@example.com
+  iobroker:
+   image: buanet/iobroker
+   volumes:
+   - /Storage/Volumes/iobroker:/opt/iobroker
+   links:
+   - influxdb
+   ports:
+   - 8081:8081 #admin
+   - 8082:8082 #visualisation
+   - 1883:1883 #iobroker
+   - 8087:8087 #rest api
+   labels:
+   - io.rancher.os.after=nginx-proxy
+   environment:
+   - VIRTUAL_HOST=iobroker.elcore.example.com
+   - VIRTUAL_PORT=8081
+   - LETSENCRYPT_HOST=iobroker.elcore.example.com
+  grafana:
+   image: grafana/grafana
+   volumes:
+   - /Storage/Volumes/grafana:/var/lib/grafana
+   links:
+   - influxdb
+   ports:
+   - 3000:3000
+   labels:
+   - io.rancher.os.after=nginx-proxy
+   environment:
+   - VIRTUAL_HOST=grafana.elcore.example.com
+   - VIRTUAL_PORT=3000
+   - LETSENCRYPT_HOST=grafana.elcore.example.com
+   - GF_SECURITY_ADMIN_USER=admin
+   - GF_SECURITY_ADMIN_PASSWORD=p4$$w0rd
+   - GF_AUTH_ANONYMOUS_ENABLED=true
+#   - GF_INSTALL_PLUGINS=https://codeload.github.com/AutohomeCorp/autohome-compareQueries-datasource/zip/master;compareQueries
+  influxdb:
+   image: influxdb
+   volumes:
+   - /Storage/Volumes/influxdb:/var/lib/influxdb
+   ports:
+   - 8086:8086
+   environment:
+   - VIRTUAL_HOST=influxdb.elcore.example.com
+   - VIRTUAL_PORT=8086
+   - LETSENCRYPT_HOST=influxdb.elcore.example.com
+   - INFLUXDB_DB=elcore
+   - INFLUXDB_ADMIN_USER=admin
+   - INFLUXDB_ADMIN_PASSWORD=p4$$w0rd
+   - INFLUXDB_READ_USER=read
+   - INFLUXDB_READ_USER_PASSWORD=p4$$w0rd
+   - INFLUXDB_WRITE_USER=write
+   - INFLUXDB_WRITE_USER_PASSWORD=p4$$w0rd
+   - INFLUXDB_HTTP_AUTH_ENABLED=true
+  grafana-manage:
+   image: node
+   volumes:
+   - /Storage/Volumes/grafana-manage:/app
+   links:
+   - grafana
+   user: node
+   command: sh /app/go.sh
+
